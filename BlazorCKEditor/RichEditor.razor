@@ -1,0 +1,59 @@
+﻿@using Microsoft.JSInterop;
+@implements IAsyncDisposable
+@inject IJSRuntime JSRuntime
+<textarea class="@CssClass" id="@Id" @oninput="ModifyText" rows="@Rows" @attributes="Attributes"
+          placeholder="@PlaceHolderText">@Text</textarea>
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public string Id { get; set; } = "";
+    [Parameter] public string PlaceHolderText { get; set; } = "Type your text here";
+    [Parameter]
+    public string CssClass { get; set; } = "form-control";
+    [Parameter]
+    public int Rows { get; set; } = 4;
+    [Parameter]
+    public string Text { get; set; } = "";
+    [Parameter]
+    public EventCallback<string> TextChanged { get; set; }
+    [Parameter]
+    public Dictionary<string, object> Attributes { get; set; } = new();
+    IJSObjectReference? javascript;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await JSRuntime.InvokeAsync<IJSObjectReference>("import","./_content/BlazorCKEditor/ckeditor/build/ckeditor.js");
+                var jsmodule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./_content/BlazorCKEditor/RichEditor.razor.js");
+                javascript = await jsmodule.InvokeAsync<IJSObjectReference>("GetInstance");
+                await javascript.InvokeVoidAsync("loadCKEditor", DotNetObjectReference.Create(this), Id);
+                await jsmodule.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+    }
+    [JSInvokable]
+    public async Task EditorDataChanged(string text)
+    {
+        await TextChanged.InvokeAsync(text);
+    }
+    // For non-rich textarea
+    private async Task ModifyText(ChangeEventArgs e)
+    {
+        var text = e?.Value?.ToString();
+        await TextChanged.InvokeAsync(text);
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (javascript is not null)
+        {
+            await javascript.DisposeAsync();
+        }
+    }
+}
